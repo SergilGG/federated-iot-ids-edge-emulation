@@ -1,0 +1,60 @@
+version: '2.4'
+
+services:
+  server:
+    build: .
+    command: python server.py
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./data:/app/data
+
+  edge-node-1:
+    build: .
+    command: sh -c "sleep 5 && python client.py 1"
+    depends_on:
+      - server
+    cpus: '1.0'
+    mem_limit: 512m
+    volumes:
+      - ./data:/app/data
+
+  edge-node-2:
+    build: .
+    command: sh -c "sleep 5 && python client.py 2"
+    depends_on:
+      - server
+    cpus: '1.0'
+    mem_limit: 512m
+    volumes:
+      - ./data:/app/data
+
+  edge-node-3:
+    build: .
+    command: sh -c "sleep 5 && python client.py 3"
+    depends_on:
+      - server
+    cpus: '1.0'
+    mem_limit: 512m
+    volumes:
+      - ./data:/app/data
+
+  edge-node-4:
+    build: .
+    command: sh -c "sleep 5 && python client.py 4"
+    depends_on:
+      - server
+    cpus: '1.0'
+    mem_limit: 512m
+    volumes:
+      - ./data:/app/data
+
+  edge-node-5:
+    build: .
+    command: sh -c "sleep 5 && python client.py 5"
+    depends_on:
+      - server
+    cpus: '1.0'
+    mem_limit: 512m
+    volumes:
+      - ./data:/app/data

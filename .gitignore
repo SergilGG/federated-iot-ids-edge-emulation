@@ -1,0 +1,38 @@
+# Entornos virtuales
+.venv/
+venv/
+env/
+ENV/
+
+# Bytecode / caches
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Dependencias instaladas (no `requirements.txt`)
+pip-wheel-metadata/
+*.egg-info/
+dist/
+build/
+
+# Archivos de entorno / credenciales
+.env
+.env.local
+*.env
+
+# VS Code / JetBrains
+.vscode/
+.idea/
+
+# Sistema
+.DS_Store
+Thumbs.db
+
+# pytest / coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Otros
+.mypy_cache/
+/data/
