@@ -1,7 +1,7 @@
 import flwr as fl
 import pandas as pd
 from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import log_loss
+from sklearn.metrics import log_loss, f1_score
 import sys
 import utils
 import warnings
@@ -18,10 +18,11 @@ y_train = df['label'].values
 model = LogisticRegression(
     penalty="l2",
     max_iter=1,
-    warm_start=True, #No olvidar el conocimiento aprendido entre rondas
+    warm_start=True,  # No olvidar el conocimiento aprendido entre rondas
     solver="saga"
 )
 utils.set_initial_params(model, n_features=X_train.shape[1], n_classes=2)
+
 
 class IDSClient(fl.client.NumPyClient):
     def get_parameters(self, config):
@@ -29,14 +30,21 @@ class IDSClient(fl.client.NumPyClient):
 
     def fit(self, parameters, config):
         utils.set_model_params(model, parameters)
-        model.fit(X_train, y_train) #Entrena localmente con sus datos
+        model.fit(X_train, y_train)  # Entrena localmente con sus datos
         return utils.get_model_parameters(model), len(X_train), {}
 
     def evaluate(self, parameters, config):
         utils.set_model_params(model, parameters)
         loss = log_loss(y_train, model.predict_proba(X_train))
         accuracy = model.score(X_train, y_train)
-        return float(loss), len(X_train), {"accuracy": float(accuracy)}
+
+        #Calcular predicciones para el F1-Score
+        y_pred = model.predict(X_train)
+        f1 = f1_score(y_train, y_pred, zero_division=0)
+
+        #Devolver el F1-Score junto con el accuracy en el diccionario
+        return float(loss), len(X_train), {"accuracy": float(accuracy), "f1_score": float(f1)}
+
 
 if __name__ == "__main__":
     fl.client.start_client(server_address="server:8080", client=IDSClient())

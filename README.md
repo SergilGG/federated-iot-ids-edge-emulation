@@ -16,6 +16,7 @@ El proyecto emula un entorno *Edge Computing* restringiendo los recursos de los 
 ```text
 .
 ├── data/                   # Carpeta para los datasets (original, limpio y particiones)
+├── Paper/                  # Carpeta de documento
 ├── centralized.py          # Modelo base para comparación
 ├── client.py               # Lógica del nodo edge (entrenamiento local)
 ├── server.py               # Servidor (estrategia FedAvg)
