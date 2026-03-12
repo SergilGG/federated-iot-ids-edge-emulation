@@ -30,6 +30,6 @@ if __name__ == "__main__":
     print("Iniciando Servidor Federado...")
     fl.server.start_server(
         server_address="0.0.0.0:8080",
-        config=fl.server.ServerConfig(num_rounds=5),  #n rondas de entrenamiento
+        config=fl.server.ServerConfig(num_rounds=100),  #n rondas de entrenamiento
         strategy=strategy,
     )

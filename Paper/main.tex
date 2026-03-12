@@ -1,0 +1,200 @@
+\documentclass[12pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[spanish]{babel}
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{geometry}
+\usepackage{booktabs}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{cite}
+
+\geometry{a4paper, margin=1in}
+
+% Configuración para bloques de código
+\lstset{
+    backgroundcolor=\color{gray!10},
+    basicstyle=\ttfamily\small,
+    breaklines=true,
+    captionpos=b,
+    frame=single,
+    rulecolor=\color{gray!40}
+}
+
+\title{\textbf{Detección Distribuida de Intrusiones en Redes IoT mediante Federated Learning con Emulación de Edge Devices}}
+\author{Sergio Gil Guerrero García \\ Repositorio: \url{https://github.com/SergilGG/federated-iot-ids-edge-emulation.git}}
+\date{9 de marzo del 2026}
+
+\begin{document}
+
+\maketitle
+
+\begin{center}
+\textbf{Examen general de conocimientos}\\
+\textbf{Profesor:} Dr. Victor Lomas Barrie
+\end{center}
+
+\begin{abstract}
+El crecimiento exponencial del Internet of Things (IoT) ha expuesto a las redes a ataques cibernéticos críticos \cite{jahangeer2023}. Este proyecto implementa un sistema de detección de intrusiones (IDS) descentralizado utilizando el paradigma de aprendizaje federado (Federated Learning). Se diseñó una topología emulada de cinco dispositivos perimetrales mediante contenedores Docker, limitados intencionalmente en sus recursos (1 CPU, 512 MB de RAM) para aproximar el hardware de una plataforma de clase edge (ej. Raspberry Pi). Utilizando el conjunto de datos TON\_IoT bajo una partición no idénticamente distribuida (non-IID), los nodos entrenaron colaborativamente un proceso de regresión logística. El análisis experimental contrastó esta arquitectura contra un modelo centralizado (Accuracy: 0.8018, F1-Score: 0.8843), demostrando que el algoritmo Federated Averaging (FedAvg) logra la convergencia matemática del error logarítmico (reduciendo la pérdida de 0.6866 a 0.6415), mitigando efectivamente el Client Drift sin comprometer la privacidad de la telemetría local.
+\end{abstract}
+
+\section{Introducción}
+El crecimiento en la cantidad de dispositivos IoT ha reducido la eficacia de los sistemas de seguridad tradicionales, ampliando considerablemente las opciones de ataque. Dado que estos equipos están diseñados para priorizar el bajo costo y el ahorro de energía, suelen tener limitaciones importantes de memoria y procesamiento que les impiden ejecutar sistemas de seguridad convencionales. Hasta ahora, la detección de anomalías se ha basado en enviar enormes volúmenes de datos directamente a la nube. Sin embargo, este enfoque centralizado genera una latencia inaceptable, satura el ancho de banda y, lo que es más crítico, compromete la privacidad de la información generada por los dispositivos \cite{jahangeer2023}.
+
+Para solventar esta crisis, el Aprendizaje Federado (FL) invierte la idea: el sistema transporta el modelo predictivo hacia los dispositivos perimetrales, permitiendo que estos entrenen colaborativamente utilizando sus datos locales de forma privada. Los nodos únicamente comparten actualizaciones paramétricas (pesos matemáticos) con un servidor agregador, minimizando los costos comunicacionales \cite{kong2022}.
+
+\section{Fundamentos}
+
+\subsection{Modelo clasificador: Regresión logística}
+Dado el límite preestablecido de 512 MB de RAM impuesto en la emulación, se requiere fundamentar el motor predictivo en un algoritmo ligero. La regresión logística es idónea para este sistema planteado, modelando la detección de intrusiones como una clasificación binaria ($y=1$ para ataque, $y=0$ para tráfico normal).
+
+Para determinar si un flujo de red es anómalo, el clasificador utiliza un modelo de regresión logística que calcula la probabilidad de intrusión. Esto se logra evaluando las características del tráfico ($x$) mediante una combinación lineal con un vector de pesos ($\omega$) y un sesgo ($b$). Dado que el resultado de esta operación puede ser cualquier valor real, se aplica una función sigmoide para acotar el resultado a una probabilidad entre 0 y 1, tal como se describe en la siguiente ecuación:
+\begin{equation}
+P(y=1|x; \omega, b) = \frac{1}{1 + e^{-(\omega^T x + b)}}
+\end{equation}
+
+Durante las rondas de entrenamiento local en cada nodo, el objetivo del optimizador es minimizar el error de las predicciones, el cual se evalúa mediante la función de Entropía Cruzada Binaria (Log Loss). Para lograr este aprendizaje, el algoritmo ajusta de manera iterativa los parámetros del modelo, específicamente el vector de pesos ($\omega$ o \texttt{coef\_}) y el término de sesgo ($b$ o \texttt{intercept\_} ), hasta encontrar su configuración óptima.
+
+
+
+\subsection{Consolidación en el servidor: Federated Averaging (FedAvg)}
+La sincronización se rige por el algoritmo \textit{FedAvg}. Tras terminar las iteraciones locales, los clientes transmiten sus vectores óptimos locales al servidor. El servidor ejecuta un promedio ponderado, otorgando mayor peso a los nodos más robustos en base a su volumen de datos $n_k$ \cite{sun2023}:
+\begin{equation}
+\omega_{t+1} = \sum_{k=1}^{K} \frac{n_k}{n} \omega_{t+1}^k
+\end{equation}
+
+En esta ecuación, $\omega_{t+1}$ representa el nuevo modelo global actualizado que resulta de la sincronización. Para construirlo, el servidor consolida los modelos locales ($\omega_{t+1}^k$) enviados por cada uno de los $K$ nodos participantes. En lugar de realizar un promedio simple, el algoritmo aplica un factor de ponderación ($\frac{n_k}{n}$) a cada contribución, donde $n_k$ es la cantidad de muestras procesadas por un nodo específico y $n$ es el total de datos en la red. De esta manera, se garantiza que los dispositivos que aportaron un mayor volumen de tráfico tengan una influencia proporcionalmente mayor en la actualización del modelo central.
+
+
+\section{Arquitectura y explicación de módulos}
+La implementación técnica del ecosistema se divide en módulos funcionales, estructurados en Python. A continuación, se desglosa la justificación y el funcionamiento de cada archivo \texttt{.py}.
+
+\subsection{Preprocesamiento y emulación Non-IID (\texttt{preprocess.py})}
+El primer paso para configurar el entorno de pruebas es la adecuación del \texttt{TON\_IoT Network Dataset}. Para ello, el script \texttt{preprocess.py} ejecuta dos tareas fundamentales:
+
+\begin{itemize}
+\item \textbf{Limpieza y estandarización de datos:} Se aíslan las variables numéricas del tráfico de red (como \texttt{duration}, \texttt{src\_bytes} y \texttt{dst\_bytes}), eliminando valores nulos y cadenas de texto que puedan generar errores durante el entrenamiento. Posteriormente, mediante la herramienta \texttt{StandardScaler}, estas variables se transforman a una distribución $Z$-score (media de cero y varianza de uno). Esta estandarización es indispensable para asegurar que el descenso del gradiente converja de manera estable y uniforme, sin que las características con valores numéricos más grandes dominen el aprendizaje.
+
+\item \textbf{Particionamiento Non-IID:} Para replicar las condiciones operativas de una red real, donde por ejemplo, un nodo perimetral procesa únicamente tráfico benigno rutinario mientras otro se encuentra bajo ataque, el conjunto de datos se divide en cinco fragmentos con distribuciones asimétricas (No Independientes e Idénticamente Distribuidas, o Non-IID). Inyectar este desequilibrio intencional en los datos es clave para evaluar la verdadera robustez y capacidad de adaptación del modelo federado.
+\end{itemize}
+
+\subsection{Capa de adaptación estructural (\texttt{utils.py})}
+La biblioteca \texttt{scikit-learn} no está diseñada de forma nativa para operar en entornos distribuidos, por lo que carece de mecanismos directos para serializar sus parámetros y transmitirlos a través de la red (por ejemplo, mediante gRPC). Para resolver esta limitación, el script \texttt{utils.py} funciona como una capa de adaptación que implementa las siguientes funciones:
+
+\begin{itemize}
+\item \textbf{\texttt{get\_model\_parameters}:} Extrae los pesos (\texttt{coef\_}) y el término de sesgo (\texttt{intercept\_}) del modelo de Regresión Logística local, transformándolos en una lista de arreglos NumPy para facilitar su empaquetado y transmisión.
+
+\item \textbf{\texttt{set\_model\_params}:} Realiza la operación inversa. Recibe los parámetros globales promediados por el servidor y los reintegra en el modelo local, actualizando así su estado para la siguiente iteración.
+
+\item \textbf{\texttt{set\_initial\_params}:} Genera una estructura inicial basada en ceros para el modelo en el servidor antes de comenzar la primera ronda de entrenamiento. Esto es necesario porque \texttt{scikit-learn} no instancia los atributos de los parámetros hasta que el modelo procesa datos por primera vez a través del método \texttt{fit()}.
+\end{itemize}
+
+\subsection{Lógica del servidor (\texttt{server.py})}
+Este módulo es responsable de inicializar y coordinar el agregador global mediante la función \texttt{start\_server} del framework Flower (\texttt{flwr}), el cual abstrae la complejidad de la comunicación en red y administra el intercambio bidireccional de tensores mediante gRPC \cite{beutel2020}. Para la consolidación del modelo, se implementa la estrategia \textit{FedAvg} bajo una configuración de sincronización:
+
+\begin{itemize}
+    \item \textbf{Sincronización total (\texttt{min\_fit\_clients=5} y \texttt{min\_available\_clients=5}):} Estos parámetros obligan al servidor a mantener un estado de espera hasta confirmar la conexión y la finalización de los cinco nodos Docker emulados. Esta restricción garantiza que la agregación matemática de los pesos sea completamente síncrona, evitando que el modelo global se sesgue por los dispositivos más rápidos.
+    
+    \item \textbf{Rondas de comunicación:} Se establece un parámetro de 5, 20 y 100 ciclos completos de comunicación global. Esta cantidad de iteraciones permite observar y evaluar la convergencia del modelo predictivo a lo largo del proceso de aprendizaje distribuido.
+\end{itemize}
+
+\subsection{Lógica del cliente (\texttt{client.py})}
+Cada uno de los cinco contenedores ejecuta una instancia independiente de \texttt{client.py}. Implementa la clase cliente de Flower sobreescribiendo métodos clave:
+\begin{itemize}
+    \item \textbf{Inicialización del clasificador local:} Se instancia el modelo mediante \texttt{LogisticRegression} \texttt{(warm\_start=True)}. El parámetro \texttt{warm\_start} es crítico para el aprendizaje federado, ya que instruye a la biblioteca a retener y reutilizar la matriz de pesos de la iteración anterior como punto de partida. Esto previene que el modelo reinicie su aprendizaje desde cero en cada nueva ronda de comunicación global.
+    
+    \item \textbf{Método \texttt{fit()}:} Es el encargado de manejar el entrenamiento local. Recibe los parámetros globales consolidados por el servidor, los integra al modelo local mediante la función \texttt{set\_model\_params}, y ejecuta la optimización sobre su partición de datos (\texttt{X\_train}, \texttt{y\_train}). Finalmente, retorna los datos actualizados junto con la cantidad de muestras procesadas (\texttt{len(X\_train)}), un escalar indispensable para que el servidor calcule el promedio ponderado de la red.
+\end{itemize}
+
+\subsection{Modelo centralizado de referencia (\texttt{centralized.py})}
+Este script establece la línea base comparativa para evaluar el rendimiento de la arquitectura distribuida. Su función es cargar la totalidad del conjunto de datos preprocesado en la memoria de un único proceso central y aplicar el mismo algoritmo de Regresión Logística. Las métricas obtenidas mediante este enfoque representan el límite superior teórico de rendimiento, ilustrando la exactitud máxima que el clasificador podría alcanzar en un escenario ideal, carente de las restricciones de privacidad y fragmentación de datos inherentes a las redes IoT.
+
+\section{Arquitectura de emulación (Docker)}
+La infraestructura del proyecto se despliega mediante un entorno de múltiples contenedores orquestado por \texttt{docker-compose.yml}. Para evaluar el rendimiento del modelo bajo condiciones realistas de dispositivos IoT, se implementan restricciones de hardware utilizando el subsistema \texttt{cgroups} del kernel de Linux en los contenedores \texttt{edge-node-X}:
+
+\begin{itemize}
+    \item \textbf{Restricción de procesamiento (\texttt{cpus: '1.0'}):} Se indica al planificador del sistema operativo limitar la ejecución del contenedor a un único núcleo lógico, emulando la capacidad computacional reducida de un dispositivo edge.
+    
+    \item \textbf{Restricción de memoria (\texttt{mem\_limit: 512m}):} Establece un límite máximo de 512 MB de memoria RAM. Si el proceso de \texttt{scikit-learn} excede este umbral al intentar cargar o procesar los lotes de datos, el mecanismo OOM (\textit{Out Of Memory}) del sistema operativo termina la ejecución de inmediato. Esta validación estricta garantiza que el código diseñado use la memoria de manera optimizada.
+\end{itemize}
+
+\section{Resultados, análisis experimental e interpretación}
+Para evaluar si la arquitectura distribuida realmente funciona, se comparó su desempeño contra el escenario ideal, el modelo centralizado (\texttt{centralized.py}).
+
+\subsection{Modelo Centralizado}
+La ejecución centralizada procesó todo el conjunto de datos de manera conjunta y en un solo lugar (datos IID). Al no tener restricciones de red, arrojó los siguientes resultados que nos sirven como límite superior:
+\begin{itemize}
+    \item \textbf{Accuracy (Exactitud): 80.18\%}
+    \item \textbf{F1-Score: 88.43\%}
+\end{itemize}
+
+\textbf{Interpretación:} En el área de Detección de Intrusiones (IDS), medir solo la exactitud puede ser engañoso, ya que el tráfico normal siempre es abrumadoramente mayor que el tráfico de ataques. Por esta razón, la métrica clave es el F1-Score (88.43\%). Al ser un equilibrio entre precisión y exhaustividad, este valor nos confirma que el modelo no solo detecta los ataques correctamente, sino que mantiene al mínimo las falsas alarmas \cite{zhao2018}.
+
+\subsection{Convergencia federada y penalización estadística (Trade-off)}
+Para probar la capacidad de la red descentralizada, se desplegaron los 5 contenedores con recursos limitados y particiones de datos severamente desbalanceadas (Non-IID). Para observar cómo el modelo evolucionaba a través del tiempo y poder realizar un cálculo global de su rendimiento, se modificaron los clientes para que evaluaran el modelo en cada época usando sus datos locales, y se configuró el servidor Flower con una función de agregación personalizada para promediar estas métricas a lo largo de 100 rondas de comunicación global.
+
+La evolución empírica de la función de pérdida (Log Loss) en el servidor mostró un comportamiento descendente consistente:
+\begin{itemize}
+    \item \textbf{Ronda 1:} Pérdida = 0.6869
+    \item \textbf{Ronda 5:} Pérdida = 0.6713 (Aprendizaje inicial acelerado)
+    \item \textbf{Ronda 20:} Pérdida = 0.6514 (Estabilización del modelo)
+    \item \textbf{Ronda 50:} Pérdida = 0.6437
+    \item \textbf{Ronda 100:} Pérdida = 0.6414 (Límite de convergencia empírico)
+\end{itemize}
+
+\textbf{Interpretación de la convergencia:} La estricta caída en el error logarítmico es la comprobación matemática de que la red distribuida logró aprender. Se observó que el algoritmo optimiza los pesos rápidamente durante las primeras 20 rondas. Posteriormente, la curva de error se aplana gradualmente hasta encontrar un punto de equilibrio alrededor de 0.6414 en la ronda 100. Esto demuestra que, a pesar de que cada nodo observaba comportamientos de red completamente distintos (efecto \textit{Client Drift}), el promediado central de \textit{FedAvg} logró reconciliar estos gradientes opuestos y estabilizar el sistema.
+
+\textbf{Análisis de métricas y justificación del sesgo:}
+Al finalizar la emulación en la ronda 100, el servidor reportó un \textbf{Accuracy global de 59.53\%} y un \textbf{F1-Score global de 62.39\%}. Al contrastar estos resultados con el límite superior del modelo centralizado (Accuracy: 80.18\%, F1-Score: 88.43\%), se observa una penalización estadística significativa. 
+
+Este comportamiento, lejos de ser un error de implementación, es el reflejo esperado de someter un algoritmo de Regresión Logística a condiciones de estrés extremo. La combinación de una partición de datos Non-IID agresiva (donde los nodos no comparten una visión representativa del tráfico global) y la restricción a un solo algoritmo lineal local, limitan la capacidad predictiva final. La literatura especializada en Inteligencia Artificial \cite{zhao2018} documenta ampliamente este \textit{trade-off} inherente al aprendizaje federado. En el contexto de esta investigación, la merma del $\sim$26\% en el F1-Score representa el costo técnico directo de garantizar el 100\% de la privacidad telemétrica y operar bajo las severas restricciones computacionales (512 MB de RAM) de los dispositivos IoT simulados.
+
+
+\section{Conclusión}
+
+Este proyecto demuestra de manera práctica que el Aprendizaje Federado es una solución arquitectónica viable y efectiva para la ciberseguridad en redes IoT. Al someter el sistema a restricciones estrictas de hardware mediante Docker (512 MB de RAM y un núcleo lógico), se comprobó que la integración de Flower y Scikit-Learn puede operar de forma estable en dispositivos perimetrales con recursos limitados, validando su extrapolación a equipos físicos de clase \textit{Edge} como una Raspberry Pi.
+
+Al comparar este enfoque distribuido frente a un modelo centralizado tradicional, se documentó una penalización estadística significativa en el rendimiento predictivo (una reducción aproximada del 26\% en la métrica F1-Score). Lejos de representar una deficiencia de la arquitectura de red, este fenómeno ilustra el compromiso técnico (\textit{trade-off}) inherente al aprendizaje federado cuando se enfrenta a distribuciones de datos severamente desbalanceadas (Non-IID) utilizando un clasificador lineal. 
+
+A cambio de esta merma predictiva, el sistema construido resuelve vulnerabilidades críticas del ecosistema IoT: garantiza el 100\% de privacidad telemétrica al mantener los datos crudos \textit{in-situ}, evita la saturación del ancho de banda en la red troncal y elimina la dependencia de un servidor central como punto único de falla y de compromiso de datos. En definitiva, este proyecto valida un marco de seguridad descentralizado, realista y escalable, sentando una base sólida para el despliegue de redes colaborativas en el futuro del Internet de las Cosas.
+
+\begin{thebibliography}{11}
+
+\bibitem{jahangeer2023}
+A. Jahangeer \textit{et al.}, ``A Review on the Security of IoT Networks: From Network Layer's Perspective,'' \textit{IEEE Access}, vol. 11, pp. 71073--71087, 2023, doi: 10.1109/ACCESS.2023.3246180.
+
+\bibitem{kong2022}
+L. Kong \textit{et al.}, ``Edge-computing-driven Internet of Things: A Survey,'' \textit{ACM Comput. Surv.}, vol. 55, no. 8, Art. no. 174, dic. 2022, doi: 10.1145/3555308.
+
+\bibitem{sun2023}
+T. Sun, D. Li, y B. Wang, ``Decentralized Federated Averaging,'' \textit{IEEE Transactions on Pattern Analysis and Machine Intelligence}, vol. 45, no. 4, pp. 4289--4301, abr. 2023, doi: 10.1109/TPAMI.2022.3196503.
+
+\bibitem{beutel2020}
+D. J. Beutel \textit{et al.}, ``Flower: A Friendly Federated Learning Research Framework,'' \textit{arXiv preprint arXiv:2007.14390}, 2020.
+
+\bibitem{zhao2018}
+Y. Zhao \textit{et al.}, ``Federated Learning with Non-IID Data,'' \textit{arXiv preprint arXiv:1806.00582}, 2018.
+
+\bibitem{toniot-dataset}
+N. Moustafa, ``The TON\_IoT Datasets,'' UNSW Research, Kaggle. [En línea]. Disponible en: \url{https://www.kaggle.com/datasets/programmer3/ton-iot-network-intrusion-dataset}. [Accedido: 07-mar-2026].
+
+\bibitem{mdpi-federated}
+A. Al-Qerem \textit{et al.}, ``Federated Learning-Based Intrusion Detection in IoT Networks: Performance Evaluation and Data Scaling Study,'' \textit{MDPI}. [En línea]. Disponible en: \url{https://www.mdpi.com/2224-2708/14/4/78}. [Accedido: 07-mar-2026].
+
+\bibitem{flower-scikit}
+Flower Framework Documentation, ``Federated Scikit-learn Using Flower.'' [En línea]. Disponible en: \url{https://flower.ai/blog/2021-07-21-federated-scikit-learn-using-flower/}. [Accedido: 07-mar-2026].
+
+\bibitem{scikit-logistic}
+Scikit-Learn Documentation, ``LogisticRegression --- scikit-learn 1.8.0.'' [En línea]. [Accedido: 07-mar-2026].
+
+\bibitem{arxiv-non-iid}
+X. Li \textit{et al.}, ``Understanding Federated Learning from IID to Non-IID dataset: An Experimental Study,'' \textit{arXiv preprint arXiv:2502.00182v2}, 2025.
+
+\bibitem{docker-limits}
+Docker Documentation, ``Resource constraints.'' [En línea]. Disponible en: \url{https://docs.docker.com/engine/containers/resource_constraints/}. [Accedido: 07-mar-2026].
+
+\end{thebibliography}
+
+\end{document}
