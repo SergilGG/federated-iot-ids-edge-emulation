@@ -14,8 +14,7 @@ X = df.drop(columns=['label']).values
 y = df['label'].values
 
 #Divdir los datos en subconjuntos de entrenamiento y prueba (80/20).
-#Fijar la semilla aleatoria para garantizar la reproducibilidad del experimento.
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42) #Semilla aleatoria para garantizar la reproducibilidad del experimento.
 
 #Establecer el límite de convergencia en 100 iteraciones sobre los datos
 model = LogisticRegression(max_iter=100, solver="saga") #optimizador 'saga'

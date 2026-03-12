@@ -18,7 +18,7 @@ y_train = df['label'].values
 model = LogisticRegression(
     penalty="l2",
     max_iter=1,
-    warm_start=True, #No olvidar el conocimiento entre rondas
+    warm_start=True, #No olvidar el conocimiento aprendido entre rondas
     solver="saga"
 )
 utils.set_initial_params(model, n_features=X_train.shape[1], n_classes=2)

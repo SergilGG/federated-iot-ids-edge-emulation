@@ -21,10 +21,8 @@ def get_model_parameters(model):
 
 def set_model_params(model, params):
     """
-    Inyectar los tensores globales promediados al recivir la
-    actualización del servidor.
-    Sobrescribir el estado local del modelo para inicializar
-    la siguiente iteración de entrenamiento.
+    Inyectar los tensores globales promediados al recivir la actualización del servidor.
+    Sobrescribir el estado local del modelo para inicializar la siguiente iteración de entrenamiento.
     """
     model.coef_ = params[0]
     if model.fit_intercept:
@@ -33,11 +31,9 @@ def set_model_params(model, params):
 
 def set_initial_params(model, n_features, n_classes):
     """
-    Construir la estructura inicial de tensores en ceros
-    antes de la Ronda 1.
+    Construir la estructura inicial de tensores en ceros antes de la Ronda 1.
     Forzar la creación de los atributos coef_ e intercept_,
-    los cuales Scikit-Learn no genera hasta ejecutar fit()
-    por primera vez.
+    los cuales Scikit-Learn no genera hasta ejecutar fit() por primera vez.
     """
     model.classes_ = np.array([i for i in range(n_classes)])
     model.coef_ = np.zeros((1, n_features))
