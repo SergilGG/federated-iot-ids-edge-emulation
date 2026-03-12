@@ -37,7 +37,7 @@
 \end{center}
 
 \begin{abstract}
-El crecimiento exponencial del Internet of Things (IoT) ha expuesto a las redes a ataques cibernéticos críticos \cite{jahangeer2023}. Este proyecto implementa un sistema de detección de intrusiones (IDS) descentralizado utilizando el paradigma de aprendizaje federado (Federated Learning). Se diseñó una topología emulada de cinco dispositivos perimetrales mediante contenedores Docker, limitados intencionalmente en sus recursos (1 CPU, 512 MB de RAM) para aproximar el hardware de una plataforma de clase edge (ej. Raspberry Pi). Utilizando el conjunto de datos TON\_IoT bajo una partición no idénticamente distribuida (non-IID), los nodos entrenaron colaborativamente un proceso de regresión logística. El análisis experimental contrastó esta arquitectura contra un modelo centralizado (Accuracy: 0.8018, F1-Score: 0.8843), demostrando que el algoritmo Federated Averaging (FedAvg) logra la convergencia matemática del error logarítmico (reduciendo la pérdida de 0.6866 a 0.6415), mitigando efectivamente el Client Drift sin comprometer la privacidad de la telemetría local.
+El crecimiento exponencial del Internet of Things (IoT) ha expuesto a las redes a ataques cibernéticos críticos \cite{jahangeer2023}. Este proyecto implementa un sistema de detección de intrusiones (IDS) descentralizado utilizando el paradigma de aprendizaje federado (Federated Learning). Se diseñó una topología emulada de cinco dispositivos perimetrales mediante contenedores Docker, limitados intencionalmente en sus recursos (1 CPU, 512 MB de RAM) para aproximar el hardware de una plataforma de clase edge (ej. Raspberry Pi). Utilizando el conjunto de datos TON\_IoT bajo una partición no idénticamente distribuida (non-IID), los nodos entrenaron colaborativamente un proceso de regresión logística. El análisis experimental contrastó esta arquitectura contra un modelo centralizado (Accuracy: 0.8018, F1-Score: 0.8843), demostrando que el algoritmo Federated Averaging (FedAvg) logra la convergencia matemática del error logarítmico (reduciendo la pérdida de 0.6870 a 0.6415), mitigando efectivamente el Client Drift sin comprometer la privacidad de la telemetría local.
 \end{abstract}
 
 \section{Introducción}
@@ -137,17 +137,17 @@ Para probar la capacidad de la red descentralizada, se desplegaron los 5 contene
 
 La evolución empírica de la función de pérdida (Log Loss) en el servidor mostró un comportamiento descendente consistente:
 \begin{itemize}
-    \item \textbf{Ronda 1:} Pérdida = 0.6869
+    \item \textbf{Ronda 1:} Pérdida = 0.6870
     \item \textbf{Ronda 5:} Pérdida = 0.6713 (Aprendizaje inicial acelerado)
     \item \textbf{Ronda 20:} Pérdida = 0.6514 (Estabilización del modelo)
     \item \textbf{Ronda 50:} Pérdida = 0.6437
-    \item \textbf{Ronda 100:} Pérdida = 0.6414 (Límite de convergencia empírico)
+    \item \textbf{Ronda 100:} Pérdida = 0.6415 (Límite de convergencia empírico)
 \end{itemize}
 
-\textbf{Interpretación de la convergencia:} La estricta caída en el error logarítmico es la comprobación matemática de que la red distribuida logró aprender. Se observó que el algoritmo optimiza los pesos rápidamente durante las primeras 20 rondas. Posteriormente, la curva de error se aplana gradualmente hasta encontrar un punto de equilibrio alrededor de 0.6414 en la ronda 100. Esto demuestra que, a pesar de que cada nodo observaba comportamientos de red completamente distintos (efecto \textit{Client Drift}), el promediado central de \textit{FedAvg} logró reconciliar estos gradientes opuestos y estabilizar el sistema.
+\textbf{Interpretación de la convergencia:} La estricta caída en el error logarítmico es la comprobación matemática de que la red distribuida logró aprender. Se observó que el algoritmo optimiza los pesos rápidamente durante las primeras 20 rondas. Posteriormente, la curva de error se aplana gradualmente hasta encontrar un punto de equilibrio alrededor de 0.6415 en la ronda 100. Esto demuestra que, a pesar de que cada nodo observaba comportamientos de red completamente distintos (efecto \textit{Client Drift}), el promediado central de \textit{FedAvg} logró reconciliar estos gradientes opuestos y estabilizar el sistema.
 
 \textbf{Análisis de métricas y justificación del sesgo:}
-Al finalizar la emulación en la ronda 100, el servidor reportó un \textbf{Accuracy global de 59.53\%} y un \textbf{F1-Score global de 62.39\%}. Al contrastar estos resultados con el límite superior del modelo centralizado (Accuracy: 80.18\%, F1-Score: 88.43\%), se observa una penalización estadística significativa. 
+Al finalizar la emulación en la ronda 100, el servidor reportó un \textbf{Accuracy global de 59.54\%} y un \textbf{F1-Score global de 62.39\%}. Al contrastar estos resultados con el límite superior del modelo centralizado (Accuracy: 80.18\%, F1-Score: 88.43\%), se observa una penalización estadística significativa. 
 
 Este comportamiento, lejos de ser un error de implementación, es el reflejo esperado de someter un algoritmo de Regresión Logística a condiciones de estrés extremo. La combinación de una partición de datos Non-IID agresiva (donde los nodos no comparten una visión representativa del tráfico global) y la restricción a un solo algoritmo lineal local, limitan la capacidad predictiva final. La literatura especializada en Inteligencia Artificial \cite{zhao2018} documenta ampliamente este \textit{trade-off} inherente al aprendizaje federado. En el contexto de esta investigación, la merma del $\sim$26\% en el F1-Score representa el costo técnico directo de garantizar el 100\% de la privacidad telemétrica y operar bajo las severas restricciones computacionales (512 MB de RAM) de los dispositivos IoT simulados.
 
